@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rail Rivals</title>
+<style>
+:root { --bg:#f6f3ec; --card:#fffdf8; --ink:#24211c; --muted:#6f685c; --line:#e2dccf;
+  --lb:#2f6db3; --cs:#c2562f; }
+@media (prefers-color-scheme: dark) { :root { --bg:#1a1916; --card:#24221e; --ink:#ede8de; --muted:#9d968a;
+  --line:#36332d; --lb:#6fa3e0; --cs:#e7835c; } }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.45 system-ui, sans-serif; }
+main { max-width:760px; margin:0 auto; padding:20px 16px 48px; }
+h1 { font-size:1.6rem; margin:0 0 4px; } h2 { font-size:1.1rem; margin:0 0 10px; }
+.sub { color:var(--muted); margin:0 0 18px; }
+.card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; margin:0 0 14px; }
+.score { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.side { border-radius:10px; padding:12px; border:2px solid var(--line); }
+.side.lb { border-color:var(--lb); } .side.cs { border-color:var(--cs); }
+.side b { display:block; font-size:1.5rem; } .side small { color:var(--muted); }
+.win { font-weight:600; }
+table { width:100%; border-collapse:collapse; font-size:.92rem; }
+th, td { text-align:left; padding:6px 4px; border-bottom:1px solid var(--line); }
+td.n, th.n { text-align:right; font-variant-numeric:tabular-nums; }
+.lbc { color:var(--lb); } .csc { color:var(--cs); }
+pre { white-space:pre-wrap; font:14px/1.45 ui-monospace, monospace; margin:0; }
+svg { width:100%; height:auto; display:block; }
+.legend { display:flex; gap:16px; font-size:.9rem; color:var(--muted); margin-top:6px; }
+.dot { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:6px; vertical-align:middle; }
+.scroll { overflow-x:auto; }
+</style></head><body><main>
+<h1>Rail Rivals</h1>
+<p class="sub">Two railway bots written by Claude race in OpenTTD every night. <span class="lbc">Logbook Lines</span> keeps a
+one-page logbook; <span class="csc">Clean Slate Lines</span> keeps only its code. Updated 2026-10-24.</p>
+<div id="app"></div>
+</main>
+<script>
+const D = {"names": {"logbook": "Logbook Lines", "clean-slate": "Clean Slate Lines"}, "nights": [], "logbook": ""};
+const $ = s => document.createElement(s);
+const money = v => "£" + Math.round(v).toLocaleString("en-GB");
+const app = document.getElementById("app");
+function card(title) { const c = $("div"); c.className = "card"; if (title) { const h = $("h2"); h.textContent = title; c.append(h); } app.append(c); return c; }
+function chart(series, labels) {
+  const W = 700, H = 240, P = 44, max = Math.max(1, ...series.flatMap(s => s.v));
+  const x = i => P + (W - P - 10) * (labels.length > 1 ? i / (labels.length - 1) : 0.5), y = v => H - 24 - (H - 40) * v / max;
+  let g = `<svg viewBox="0 0 ${W} ${H}" role="img">`;
+  for (let k = 0; k <= 4; k++) { const v = max * k / 4; g += `<line x1="${P}" x2="${W - 10}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/>` +
+    `<text x="${P - 6}" y="${y(v) + 4}" text-anchor="end" font-size="11" fill="var(--muted)">${v >= 1000 ? Math.round(v / 1000) + "k" : Math.round(v)}</text>`; }
+  const step = Math.ceil(labels.length / 8);
+  labels.forEach((l, i) => { if (i % step == 0 || i == labels.length - 1) g += `<text x="${x(i)}" y="${H - 6}" text-anchor="middle" font-size="11" fill="var(--muted)">${l}</text>`; });
+  series.forEach(s => {
+    g += `<polyline fill="none" stroke="${s.c}" stroke-width="2.5" points="${s.v.map((v, i) => x(i) + "," + y(v)).join(" ")}"/>`;
+    s.v.forEach((v, i) => g += `<circle cx="${x(i)}" cy="${y(v)}" r="3" fill="${s.c}"><title>${labels[i]}: ${money(v)}</title></circle>`);
+  });
+  return g + "</svg>";
+}
+function legend() { return `<div class="legend"><span><span class="dot" style="background:var(--lb)"></span>Logbook Lines</span><span><span class="dot" style="background:var(--cs)"></span>Clean Slate Lines</span></div>`; }
+if (!D.nights.length) { card().textContent = "No nights played yet."; }
+else {
+  const last = D.nights[D.nights.length - 1];
+  const wins = { logbook: 0, "clean-slate": 0 };
+  D.nights.forEach(n => { if (n.winner) wins[n.winner]++; });
+  let c = card(`Night ${last.night} (${last.date}): ${last.winner ? D.names[last.winner] + " won" : "a tie"}`);
+  c.insertAdjacentHTML("beforeend", `<div class="score">` + ["logbook", "clean-slate"].map(s =>
+    `<div class="side ${s == "logbook" ? "lb" : "cs"}"><small>${D.names[s]}</small><b>${money(last.avg[s])}</b>` +
+    `<small>average value, 1 Jan 1970 · ${wins[s]} night${wins[s] == 1 ? "" : "s"} won</small></div>`).join("") + `</div>`);
+  c = card("Every night: average final value");
+  c.insertAdjacentHTML("beforeend", chart([{ c: "var(--lb)", v: D.nights.map(n => n.avg.logbook) },
+    { c: "var(--cs)", v: D.nights.map(n => n.avg["clean-slate"]) }], D.nights.map(n => "N" + n.night)) + legend());
+  c = card(`Last night, value year by year (average of ${last.maps.length} maps)`);
+  const yrs = Object.keys(last.years.logbook);
+  c.insertAdjacentHTML("beforeend", chart([{ c: "var(--lb)", v: yrs.map(y => last.years.logbook[y]) },
+    { c: "var(--cs)", v: yrs.map(y => last.years["clean-slate"][y]) }], yrs) + legend());
+  c = card("Last night, map by map");
+  c.insertAdjacentHTML("beforeend", `<div class="scroll"><table><tr><th>Map</th><th>Started first</th><th class="n lbc">Logbook</th><th class="n csc">Clean Slate</th></tr>` +
+    last.maps.map(m => `<tr><td>${m.map}</td><td>${D.names[m.first]}</td><td class="n">${money(m.logbook)}</td><td class="n">${money(m["clean-slate"])}</td></tr>`).join("") + `</table></div>`);
+  if (D.logbook) { c = card("Logbook Lines' latest logbook"); const p = $("pre"); p.textContent = D.logbook; c.append(p); }
+  c = card("All nights");
+  c.insertAdjacentHTML("beforeend", `<div class="scroll"><table><tr><th>Night</th><th>Date</th><th class="n lbc">Logbook</th><th class="n csc">Clean Slate</th><th>Bots accepted</th><th class="n">Tokens</th></tr>` +
+    D.nights.slice().reverse().map(n => `<tr><td>${n.night}</td><td>${n.date}</td><td class="n${n.winner == "logbook" ? " win" : ""}">${money(n.avg.logbook)}</td>` +
+    `<td class="n${n.winner == "clean-slate" ? " win" : ""}">${money(n.avg["clean-slate"])}</td><td>${n.accepted}</td><td class="n">${n.tokens ? n.tokens.toLocaleString("en-GB") : "–"}</td></tr>` +
+    (n.notes.length ? `<tr><td></td><td colspan="5"><small>${n.notes.map(s => s.replace(/</g, "&lt;")).join(" · ")}</small></td></tr>` : "")).join("") + `</table></div>`);
+}
+</script></body></html>
